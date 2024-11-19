@@ -1,209 +1,313 @@
 import flet as ft
+import firebase_admin
+from firebase_admin import credentials, firestore, auth, storage
+from datetime import datetime
 
+# Inicializar Firebase com apiKey e Storage Bucket
+if not firebase_admin._apps:
+    cred = credentials.Certificate("C:\\Users\\ddavi\\OneDrive\\Área de Trabalho\\work\\StoreFlet\\shop\\try1-d5f52-firebase-adminsdk-ox7ry-47c129a44d.json")
 
-class LandPage(ft.View):
+    firebase_admin.initialize_app(cred, {
+        'apiKey': "AIzaSyCtAsNefm5FzL3bLMENYjAWxrqjiYqktZM",
+        'storageBucket': 'try1-d5f52.appspot.com'
+    })
+
+db = firestore.client()
+bucket = storage.bucket()
+
+# Configurações de cores
+PRIMARY_COLOR = "#000000"  # Preto
+SECONDARY_COLOR = "#FFFFFF"  # Branco
+TEXT_COLOR = "#FFFFFF"
+
+# Tela de Registro
+class RegisterPage(ft.View):
     def __init__(self, page: ft.Page) -> None:
-        super(LandPage, self).__init__(
-            route="/", horizontal_alignment="center",
-            vertical_alignment="center"
-        )
-        
-        self.page = page
-        
-        self.logo_carrinho_compras = ft.Icon(name="shopping_cart_outlined", size=64)
-        self.titulo = ft.Text("Lojinha do Denis".upper(), size=28, weight="bold")
-        self.subtitulo = ft.Text("Feito para teste com FLET", size=11)
-        
-        self.btn_pagina_prod = ft.IconButton(
-            "arrow_forward",
-            width=54,
-            height=54,
-            style=ft.ButtonStyle(
-                bgcolor={"": "#202020"},
-                shape={"": ft.RoundedRectangleBorder(radius=8)},
-                side={"": ft.BorderSide(2, "white54")},
-            ),
-            on_click=lambda e: self.page.go("/produtos")
-        )
-
-        self.controls = [
-            self.logo_carrinho_compras,
-            ft.Divider(height=25, color="transparent"),
-            self.titulo,
-            self.subtitulo,
-            ft.Divider(height=10, color="transparent"),
-            self.btn_pagina_prod
-        ]
-
-
-class Model(object):
-    produtos: dict = {
-        0: {
-            "id": "1",
-            "img_src": "/assets/camisa.jpg",
-            "nome": "Camiseta Estampada",
-            "descricao": "Camiseta de algodão com estampa criativa.",
-            "preco": "49.99",
-        },
-        1: {
-            "id": "2",
-            "img_src": "/assets/tenis.jpg",
-            "nome": "Tênis Esportivo",
-            "descricao": "Tênis confortável para corrida e uso diário.",
-            "preco": "199.99",
-        },
-        2: {
-            "id": "3",
-            "img_src": "/assets/mochila.jpg",
-            "nome": "Mochila de Couro",
-            "descricao": "Mochila de couro premium com compartimentos espaçosos.",
-            "preco": "299.99",
-        },
-        3: {
-            "id": "4",
-            "img_src": "/assets/relogio.jpg",
-            "nome": "Relógio Clássico",
-            "descricao": "Relógio de mesa com design elegante.",
-            "preco": "399.99",
-        },
-        4: {
-            "id": "5",
-            "img_src": "/assets/fone.jpg",
-            "nome": "Fone de Ouvido Bluetooth",
-            "descricao": "Fone sem fio com cancelamento de ruído e som de alta qualidade.",
-            "preco": "149.99",
-        }
-        
-    }
-    
-    carrinho: dict = {}
-    
-    @staticmethod
-    def get_produtos() -> dict:
-        return Model.produtos
-    
-    @staticmethod
-    def get_carrinho() -> dict:
-        return Model.carrinho 
-
-
-class Produto(ft.View):
-    def __init__(self, page: ft.Page) -> None:
-        super(Produto, self).__init__(route="/produtos")
+        super(RegisterPage, self).__init__(route="/register")
         self.page = page
         self.iniciar()
 
     def iniciar(self):
-        self.produtos = ft.Row(expand=True, scroll="auto", spacing=30)
-        self.criar_produtos()
+        self.page.bgcolor = PRIMARY_COLOR
+        self.page.update()
+
+        self.name_input = ft.TextField(label="Nome", width=280, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR, text_size=16)
+        self.email_input = ft.TextField(label="Email", width=280, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR, text_size=16)
+        self.password_input = ft.TextField(
+            label="Senha", width=280, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR, password=True, text_size=16
+        )
+        self.confirm_password_input = ft.TextField(
+            label="Confirmar Senha", width=280, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR, password=True, text_size=16
+        )
+        def handle_date_change(e):
+            text = e.control.value  # Obtém o texto atual
+            if len(text) == 2 and not text.endswith("/"):  # Após DD
+                e.control.value += "/"
+            elif len(text) == 5 and text.count("/") == 1:  # Após MM
+                e.control.value += "/"
+            e.control.update()
+
+        self.birthdate_input = ft.TextField(
+            label="Data de Nascimento (DD/MM/AAAA)",
+            width=280,
+            bgcolor=SECONDARY_COLOR,
+            color=PRIMARY_COLOR,
+            text_size=16,
+            on_change=handle_date_change,  # Define o evento para detecção de mudanças
+        )
+        self.error_message = ft.Text(color=SECONDARY_COLOR, text_align="center")
 
         self.controls = [
-            self.display_produto_pagina_header(),
-            ft.Text("Loja", size=32),
-            ft.Text("Selecione o item da lista abaixo"),
-            self.produtos,
-            self.display_produto_pagina_footer(),
-        ]
-        
-    def display_produto_pagina_footer(self):
-        return ft.Row([ft.Text("Denis Loja", size=10)], alignment="center")
-    
-    def display_produto_pagina_header(self):
-        return ft.Container(
-            content=ft.Row(
+            ft.Column(
                 [
-                    ft.Icon("settings", size=18),
-                    ft.IconButton(
-                        "shopping_cart_outlined",
-                        on_click=lambda e: self.page.go("/carrinho"),
-                        icon_size=18,
-                    )
+                    ft.Text("Registro", size=28, weight="bold", color=TEXT_COLOR, text_align="center"),
+                    ft.Divider(height=20, color="transparent"),
+                    self.name_input,
+                    self.email_input,
+                    self.password_input,
+                    self.confirm_password_input,
+                    self.birthdate_input,
+                    ft.Divider(height=10, color="transparent"),
+                    self.error_message,
+                    ft.Divider(height=20, color="transparent"),
+                    ft.ElevatedButton(
+                        "Registrar",
+                        width=150,
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
+                        ),
+                        on_click=self.registrar_usuario,
+                    ),
                 ],
-                alignment="spaceBetween"
+                alignment="center",
+                horizontal_alignment="center",
+                expand=True,
             )
+        ]
+
+    def registrar_usuario(self, e):
+        nome = self.name_input.value
+        email = self.email_input.value
+        senha = self.password_input.value
+        confirmacao_senha = self.confirm_password_input.value
+        nascimento = self.birthdate_input.value
+
+        # Validações
+        if not nome or not email or not senha or not confirmacao_senha or not nascimento:
+            self.error_message.value = "Todos os campos são obrigatórios."
+            self.page.update()
+            return
+
+        if senha != confirmacao_senha:
+            self.error_message.value = "As senhas não coincidem."
+            self.page.update()
+            return
+
+        try:
+            datetime.strptime(nascimento, "%d/%m/%Y")
+        except ValueError:
+            self.error_message.value = "Data de nascimento inválida. Use o formato DD/MM/AAAA."
+            self.page.update()
+            return
+
+        # Salvar no Firebase
+        try:
+            user = auth.create_user(email=email, password=senha)
+            db.collection('usuarios').document(user.uid).set({
+                "nome": nome,
+                "email": email,
+                "nascimento": nascimento,
+            })
+            self.error_message.value = "Registro bem-sucedido! Redirecionando para o login..."
+            self.page.update()
+            self.page.go("/auth")
+        except Exception as err:
+            self.error_message.value = f"Erro ao registrar: {err}"
+            self.page.update()
+
+
+# Tela de Login
+class AuthPage(ft.View):
+    def __init__(self, page: ft.Page) -> None:
+        super(AuthPage, self).__init__(route="/auth")
+        self.page = page
+        self.iniciar()
+
+    def iniciar(self):
+        self.page.bgcolor = PRIMARY_COLOR
+        self.page.update()
+
+        self.email_input = ft.TextField(label="Email", width=280, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR, text_size=16)
+        self.password_input = ft.TextField(
+            label="Senha", width=280, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR, password=True, text_size=16
+        )
+        self.error_message = ft.Text(color=SECONDARY_COLOR, text_align="center")
+
+        self.controls = [
+            ft.Column(
+                [
+                    ft.Text("Bem-vindo", size=28, weight="bold", color=TEXT_COLOR, text_align="center"),
+                    ft.Text("Login ou Registro", size=16, color=TEXT_COLOR, text_align="center"),
+                    ft.Divider(height=20, color="transparent"),
+                    self.email_input,
+                    self.password_input,
+                    ft.Divider(height=10, color="transparent"),
+                    self.error_message,
+                    ft.Divider(height=20, color="transparent"),
+                    ft.Row(
+                        [
+                            ft.ElevatedButton(
+                                "Login",
+                                width=130,
+                                style=ft.ButtonStyle(
+                                    bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
+                                ),
+                                on_click=self.fazer_login,
+                            ),
+                            ft.ElevatedButton(
+                                "Registrar",
+                                width=130,
+                                style=ft.ButtonStyle(
+                                    bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
+                                ),
+                                on_click=lambda _: self.page.go("/register"),
+                            ),
+                        ],
+                        alignment="center",
+                        spacing=20,
+                    ),
+                ],
+                alignment="center",
+                horizontal_alignment="center",
+                expand=True,
+            )
+        ]
+
+    def fazer_login(self, e):
+        email = self.email_input.value
+        password = self.password_input.value
+
+        if not email or not password:
+            self.error_message.value = "Preencha todos os campos."
+            self.page.update()
+            return
+
+        try:
+            user = auth.get_user_by_email(email)
+            if user:
+                global logged_in_user
+                logged_in_user = user.uid
+                self.page.go("/")
+            else:
+                self.error_message.value = "Usuário ou senha inválidos."
+        except Exception as err:
+            self.error_message.value = f"Erro ao logar: {err}"
+        self.page.update()
+
+
+# Página Inicial (Home)
+class HomePage(ft.View):
+    def __init__(self, page: ft.Page) -> None:
+        super(HomePage, self).__init__(route="/")
+        self.page = page
+        self.user_name = None  
+        self.produtos = [] 
+        self.iniciar()
+
+    def iniciar(self):
+        self.page.bgcolor = PRIMARY_COLOR
+        self.page.update()
+
+        self.bem_vindo_text = ft.Text(
+            value=f"Bem-vindo, {self.user_name}!",
+            size=28,
+            weight="bold",
+            color=TEXT_COLOR,
+            text_align="center",
         )
 
-    def criar_produtos(self, produtos: dict = Model.get_produtos()) -> None:
-        for _, values in produtos.items():
-            for key, value in values.items():
-                if key == "img_src":
-                    img_src = self.criar_produto_img(img_path=value)
-
-                elif key == "nome":
-                    nome = values["nome"]
-
-                elif key == "descricao":
-                    descricao = values["descricao"]
-
-                elif key == "id":
-                    idd = values["id"]
-
-                elif key == "preco":
-                    preco = self.criar_produto_evento(values["preco"], idd)
-
-            texts = self.criar_produto_texto(nome, descricao)
-            self.criar_visualizacao_item(img_src, texts, preco)
-
-    def criar_visualizacao_item(self, img_src, texts, preco):
-        item = ft.Column()
-
-        item.controls.append(self.criar_produto_container(5, img_src))
-        item.controls.append(self.criar_produto_container(5, texts))
-        item.controls.append(self.criar_produto_container(1, preco))
-
-        self.produtos.controls.append(self.criar_item_wraper(item))
-
-    def criar_item_wraper(self, item: ft.Column):
-        return ft.Container(
-            width=250,
-            height=450,
-            content=item,
-            padding=8,
-            border_radius=6
+        self.produtos_container = ft.Column(
+            spacing=10,
+            alignment="center",
+            controls=self.exibir_produtos(),
         )
 
-    def criar_produto_img(self, img_path: str):
-        return ft.Container(
-            image=ft.Image(src=img_path, fit="fill"),
-            border_radius=6, padding=10
-        )
+        self.controls = [
+            ft.Column(
+                [
+                    self.bem_vindo_text,
+                    ft.Divider(height=20, color="transparent"),
+                    ft.Text("Produtos disponíveis:", size=18, color=TEXT_COLOR, text_align="center"),
+                    ft.Divider(height=10, color="transparent"),
+                    self.produtos_container,
+                ],
+                alignment="center",
+                horizontal_alignment="center",
+                expand=True,
+            )
+        ]
 
-    def criar_produto_texto(self, nome: str, descricao: str):
-        return ft.Column([ft.Text(nome, size=18), ft.Text(descricao, size=11)])
+    def exibir_produtos(self):
+        produtos = Model.get_produtos()  # Busca produtos do Firebase
+        produtos_lista = []
+        for produto_id, values in produtos.items():
+            produto_card = ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(values.get("nome", "Produto sem nome"), size=18, color=SECONDARY_COLOR),
+                        ft.Text(f"R$ {values.get('preco', '0.00')}", size=16, color=SECONDARY_COLOR),
+                    ]
+                ),
+                padding=10,
+                margin=5,
+                bgcolor="#202020",
+                border_radius=8,
+                alignment="center",
+                expand=True,
+            )
+            produtos_lista.append(produto_card)
+        return produtos_lista
 
-    def criar_produto_evento(self, preco: str, idd: str):
-        return ft.Row(
-            [
-                ft.Text(preco, size=14),
-                ft.IconButton(
-                    "adicionar", data=idd,
-                    # on_click=self.adc_ao_carrinho
-                )
-            ],
-            alignment="spaceBetween"
-        )
+    def carregar_dados_usuario(self, user_id):
+        try:
+            usuario_doc = db.collection("usuarios").document(user_id).get()
+            if usuario_doc.exists:
+                self.user_name = usuario_doc.to_dict().get("nome", "Usuário")
+            else:
+                self.user_name = "Usuário"
+        except Exception as e:
+            print(f"Erro ao buscar dados do usuário: {e}")
+            self.user_name = "Usuário"
 
-    def criar_produto_container(self, expand: bool, control: ft.Control):
-        return ft.Container(content=control, expand=expand, padding=5)
+    def atualizar_home(self, user_id):
+        self.carregar_dados_usuario(user_id)
+        self.bem_vindo_text.value = f"Bem-vindo, {self.user_name}!"
+        self.produtos_container.controls = self.exibir_produtos()
+        self.page.update()
 
 
-def main(page: ft.Page) -> None:
-    
-    def router(route) -> None:
+# Atualização da lógica de navegação
+def main(page: ft.Page):
+    global logged_in_user
+    logged_in_user = None
+
+    def router(route):
         page.views.clear()
-        
-        if page.route == "/":
-            landing = LandPage(page)
-            page.views.append(landing)
-        
-        elif page.route == "/produtos":
-            produtos = Produto(page)
-            page.views.append(produtos)
-        
+        if not logged_in_user and page.route not in ["/auth", "/register"]:
+            page.go("/auth")
+        elif page.route == "/auth":
+            page.views.append(AuthPage(page))
+        elif page.route == "/register":
+            page.views.append(RegisterPage(page))
+        elif page.route == "/":
+            home_page = HomePage(page)
+            home_page.atualizar_home(logged_in_user)
+            page.views.append(home_page)
         page.update()
-    
+
     page.on_route_change = router
     page.go("/")
 
 
 ft.app(target=main, assets_dir="assets")
+
