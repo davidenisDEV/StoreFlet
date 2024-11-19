@@ -9,7 +9,7 @@ if not firebase_admin._apps:
 
     firebase_admin.initialize_app(cred, {
         'apiKey': "AIzaSyCtAsNefm5FzL3bLMENYjAWxrqjiYqktZM",
-        'storageBucket': 'try1-d5f52.appspot.com'
+        'storageBucket': 'try1-d5f52.firebasestorage.app'
     })
 
 db = firestore.client()
@@ -216,9 +216,12 @@ class HomePage(ft.View):
         self.iniciar()
 
     def iniciar(self):
+        # Configuração inicial da página
         self.page.bgcolor = PRIMARY_COLOR
+        self.page.scroll = "auto"  # Permite rolagem na página
         self.page.update()
 
+        # Texto de boas-vindas
         self.bem_vindo_text = ft.Text(
             value=f"Bem-vindo, {self.user_name}!",
             size=28,
@@ -227,6 +230,7 @@ class HomePage(ft.View):
             text_align="center",
         )
 
+        # Barra de pesquisa
         self.search_input = ft.TextField(
             hint_text="Buscar produtos...",
             width=300,
@@ -235,12 +239,22 @@ class HomePage(ft.View):
             on_change=self.buscar_produto,
         )
 
+        # Contêiner para exibir os produtos
         self.produtos_container = ft.Column(
             spacing=10,
             alignment="center",
             controls=self.exibir_produtos(),
         )
 
+        # Botão para adicionar produto no canto inferior
+        self.add_product_button = ft.FloatingActionButton(
+            icon=ft.icons.ADD,
+            bgcolor=SECONDARY_COLOR,
+            foreground_color=PRIMARY_COLOR,
+            on_click=lambda _: self.page.go("/add_product"),
+        )
+
+        # Layout principal da HomePage
         self.controls = [
             ft.Column(
                 [
@@ -251,24 +265,17 @@ class HomePage(ft.View):
                     ft.Text("Produtos disponíveis:", size=18, color=TEXT_COLOR, text_align="center"),
                     ft.Divider(height=10, color="transparent"),
                     self.produtos_container,
-                    ft.Divider(height=20, color="transparent"),
-                    ft.ElevatedButton(
-                        "Adicionar Produto",
-                        width=200,
-                        style=ft.ButtonStyle(
-                            bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
-                        ),
-                        on_click=self.abrir_painel_adicionar_produto,
-                    ),
                 ],
                 alignment="center",
                 horizontal_alignment="center",
                 expand=True,
-            )
+            ),
+            self.add_product_button,
         ]
 
     def exibir_produtos(self):
-        produtos = Model.get_produtos()  # Busca produtos do Firebase
+        """Busca e exibe os produtos cadastrados no banco de dados."""
+        produtos = Model.get_produtos()
         produtos_lista = []
 
         # Filtro de busca
@@ -277,6 +284,12 @@ class HomePage(ft.View):
                 produto_card = ft.Container(
                     content=ft.Column(
                         [
+                            ft.Image(
+                                src=values.get("img_src", ""),
+                                width=150,
+                                height=150,
+                                fit="cover",
+                            ),
                             ft.Text(values.get("nome", "Produto sem nome"), size=18, color=SECONDARY_COLOR),
                             ft.Text(f"R$ {values.get('preco', '0.00')}", size=16, color=SECONDARY_COLOR),
                             ft.Text(values.get("descricao", ""), size=14, color=SECONDARY_COLOR),
@@ -293,22 +306,13 @@ class HomePage(ft.View):
         return produtos_lista
 
     def buscar_produto(self, e):
-        self.busca_texto = e.control.value  # Atualiza o texto da busca
+        """Atualiza a lista de produtos com base no texto da barra de pesquisa."""
+        self.busca_texto = e.control.value
         self.produtos_container.controls = self.exibir_produtos()
         self.page.update()
 
-    def abrir_painel_adicionar_produto(self, e):
-        self.page.dialog = ft.AlertDialog(
-            title=ft.Text("Adicionar Produto"),
-            content=PainelAdicionarProduto(self.page),
-            actions=[
-                ft.TextButton("Fechar", on_click=lambda _: self.page.dialog.close()),
-            ],
-        )
-        self.page.dialog.open = True
-        self.page.update()
-
     def carregar_dados_usuario(self, user_id):
+        """Carrega o nome do usuário logado do banco de dados."""
         try:
             usuario_doc = db.collection("usuarios").document(user_id).get()
             if usuario_doc.exists:
@@ -320,54 +324,100 @@ class HomePage(ft.View):
             self.user_name = "Usuário"
 
     def atualizar_home(self, user_id):
+        """Atualiza a página com o nome do usuário e os produtos."""
         self.carregar_dados_usuario(user_id)
         self.bem_vindo_text.value = f"Bem-vindo, {self.user_name}!"
         self.produtos_container.controls = self.exibir_produtos()
         self.page.update()
 
 
-# Painel para adicionar produtos
-class PainelAdicionarProduto(ft.UserControl):
+class AddProductPage(ft.View):
     def __init__(self, page: ft.Page) -> None:
-        super(PainelAdicionarProduto, self).__init__()
+        super(AddProductPage, self).__init__(route="/add_product")
         self.page = page
+        self.iniciar()
 
-    def build(self):
-        self.nome_input = ft.TextField(label="Nome do Produto", width=300)
-        self.preco_input = ft.TextField(label="Preço", width=300)
-        self.descricao_input = ft.TextField(label="Descrição", width=300)
-        self.img_src_input = ft.TextField(label="URL da Imagem", width=300)
+    def iniciar(self):
+        self.page.bgcolor = PRIMARY_COLOR
+        self.page.update()
+
+        # Inputs para o cadastro de produto
+        self.nome_input = ft.TextField(label="Nome do Produto", width=300, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR)
+        self.preco_input = ft.TextField(label="Preço (R$)", width=300, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR)
+        self.descricao_input = ft.TextField(label="Descrição", width=300, bgcolor=SECONDARY_COLOR, color=PRIMARY_COLOR)
+        self.file_picker = ft.FilePicker(on_result=self.upload_imagem)  # File Picker para upload de imagens
+        self.uploaded_img_url = None  # URL da imagem carregada
+        self.img_preview = ft.Image(
+            src="", width=200, height=200, fit="contain", border_radius=10  # Preview da imagem carregada
+        )
         self.error_message = ft.Text(color="red", size=14)
 
-        return ft.Column(
-            [
-                self.nome_input,
-                self.preco_input,
-                self.descricao_input,
-                self.img_src_input,
-                self.error_message,
-                ft.ElevatedButton(
-                    "Salvar Produto",
-                    width=150,
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
+        # Layout da página de cadastro
+        self.controls = [
+            ft.Column(
+                [
+                    ft.Text("Adicionar Produto", size=24, weight="bold", color=TEXT_COLOR, text_align="center"),
+                    self.nome_input,
+                    self.preco_input,
+                    self.descricao_input,
+                    ft.Row(
+                        [
+                            ft.TextButton("Selecionar Imagem", on_click=lambda _: self.file_picker.pick_files()),
+                            self.img_preview,
+                        ],
+                        alignment="center",
+                        spacing=20,
                     ),
-                    on_click=self.salvar_produto,
-                ),
-            ],
-            alignment="start",
-            spacing=10,
-        )
+                    self.error_message,
+                    ft.Divider(height=20, color="transparent"),
+                    ft.ElevatedButton(
+                        "Salvar Produto",
+                        width=200,
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
+                        ),
+                        on_click=self.salvar_produto,
+                    ),
+                ],
+                alignment="center",
+                horizontal_alignment="center",
+                expand=True,
+            ),
+            self.file_picker,
+        ]
+
+    def upload_imagem(self, e):
+        """Realiza o upload da imagem para o Firebase Storage e atualiza o preview."""
+        if e.files and len(e.files) > 0:
+            file_path = e.files[0].path
+            file_name = e.files[0].name
+
+            try:
+                # Upload para Firebase Storage
+                blob = bucket.blob(f"produtos/{file_name}")
+                blob.upload_from_filename(file_path)
+                blob.make_public()  # Torna a imagem pública
+                self.uploaded_img_url = blob.public_url  # URL pública da imagem
+
+                # Atualiza o preview da imagem
+                self.img_preview.src = self.uploaded_img_url
+                self.page.update()
+            except Exception as err:
+                self.error_message.value = f"Erro ao fazer upload: {err}"
+                self.page.update()
+        else:
+            self.error_message.value = "Nenhuma imagem selecionada."
+            self.page.update()
 
     def salvar_produto(self, e):
+        """Salva o produto no banco de dados com a URL da imagem carregada."""
         nome = self.nome_input.value
         preco = self.preco_input.value
         descricao = self.descricao_input.value
-        img_src = self.img_src_input.value
 
-        if not nome or not preco:
-            self.error_message.value = "Nome e preço são obrigatórios!"
-            self.update()
+        if not nome or not preco or not self.uploaded_img_url:
+            self.error_message.value = "Nome, preço e imagem são obrigatórios!"
+            self.page.update()
             return
 
         try:
@@ -376,70 +426,13 @@ class PainelAdicionarProduto(ft.UserControl):
                     "nome": nome,
                     "preco": preco,
                     "descricao": descricao,
-                    "img_src": img_src,
+                    "img_src": self.uploaded_img_url,
                 }
             )
-            self.error_message.value = "Produto adicionado com sucesso!"
-            self.update()
-            self.page.dialog.close()
+            self.page.go("/")
         except Exception as err:
             self.error_message.value = f"Erro ao salvar: {err}"
-            self.update()
-
-
-
-class ProfilePage(ft.View):
-    def __init__(self, page: ft.Page) -> None:
-        super(ProfilePage, self).__init__(route="/profile")
-        self.page = page
-        self.iniciar()
-
-    def iniciar(self):
-        self.page.bgcolor = PRIMARY_COLOR
-        self.page.update()
-
-        self.nome_input = ft.TextField(
-            label="Alterar Nome",
-            width=300,
-            bgcolor=SECONDARY_COLOR,
-            color=PRIMARY_COLOR,
-        )
-
-        self.profile_pic = ft.Image(
-            src="",  # Padrão vazio
-            width=100,
-            height=100,
-            border_radius=50,
-            fit="cover",
-        )
-
-        self.controls = [
-            ft.Column(
-                [
-                    self.profile_pic,
-                    self.nome_input,
-                    ft.ElevatedButton(
-                        "Salvar Alterações",
-                        on_click=self.salvar_alteracoes,
-                        style=ft.ButtonStyle(
-                            bgcolor=ft.colors.WHITE, color=PRIMARY_COLOR, shape=ft.RoundedRectangleBorder(radius=8)
-                        ),
-                    ),
-                ],
-                alignment="center",
-                horizontal_alignment="center",
-                expand=True,
-            )
-        ]
-
-    def salvar_alteracoes(self, e):
-        nome = self.nome_input.value
-        if nome:
-            try:
-                db.collection("usuarios").document(logged_in_user).update({"nome": nome})
-                self.page.go("/")
-            except Exception as err:
-                print(f"Erro ao salvar alterações: {err}")
+            self.page.update()
 
 
 class Model:
@@ -477,6 +470,10 @@ def main(page: ft.Page):
             home_page = HomePage(page)
             home_page.atualizar_home(logged_in_user)
             page.views.append(home_page)
+        elif page.route == "/add_product":
+            add_product_page = AddProductPage(page)
+            page.views.append(add_product_page)
+
         page.update()
 
     page.on_route_change = router
