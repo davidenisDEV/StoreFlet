@@ -26,17 +26,9 @@ O **StoreFlet** é uma aplicação de e-commerce desenvolvida com o framework **
 - **Armazenamento de Imagens**: Firebase Storage
 - **Gerenciamento de Dependências**: pip (requirements.txt)
 
-## Instalação e Execução
-
 ### Pré-requisitos
 
 - Python 3.8 ou superior
 - Conta no Firebase configurada com Firestore e Storage
 - Ambiente virtual configurado (`venv`)
 
-### Passos para rodar o projeto
-
-1. **Clone este repositório**:
-   ```bash
-   git clone https://github.com/seu-usuario/storeflet.git
-   cd storeflet
